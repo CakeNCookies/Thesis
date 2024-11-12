@@ -41,6 +41,7 @@ ui <- dashboardPage(
   dashboardHeader(title = "MITHrIL"),
   dashboardSidebar(
     sidebarMenu(
+      id = "tabs",
       menuItem("Run MITHrIL", tabName = "mithril", icon = icon("dashboard")),
       menuItem("Visualize Data", tabName = "visualizedata", icon = icon("th"))
     )
@@ -51,6 +52,7 @@ ui <- dashboardPage(
       tabItem(tabName = "mithril",
           fluidRow(
           tabBox(
+            width = 12,
           tabPanel("Base MITHrIL",
            status = "primary",
            solidHeader = TRUE,
@@ -77,7 +79,7 @@ ui <- dashboardPage(
                                                                                                           "WEAK" = " -enrichment-evidence-type WEAK ",
                                                                                                           "PREDICTION" = " -enrichment-evidence-type PREDICTION ",
                                                                                                           "UNKNOWN" = " -enrichment-evidence-type UNKNOWN ", 
-                                                                                                          "NONE" = ""), selected =  "STRONG", width = 450),
+                                                                                                          "NONE" = ""), selected =" -enrichment-evidence-type STRONG ", width = 450),
              radioButtons("metapath", "6. Run all algorithms on a meta-pathway obtained by merging all pathways in the internal repository:", c("Do not merge" = "",
                                                                                                                                                 "Merge" = " -m "), width = 800),
              textInput("excludeCAT", "7. List of pathway categories (separated by comma) to exclude when building the meta-pathway environment. Requires merging all pathways in the internal repository (Setting 6):", width = 800),
@@ -91,48 +93,106 @@ ui <- dashboardPage(
              numericInput("iterationN", "13. Number of iterations for the p-value computation", value = 2001, min = 0, width = 800),
              numericInput("seed", "14. For experimental reproducibility, sets the seed of the random number generator", value = 123, min = 0, width = 800),
              numericInput("threads", "15. Number of threads. If 0 the number is automatically detected:", value = 0, min = 0, width = 800),
-             radioButtons("verbose", "16. Show verbose computational outline", c("Not Verbose" = "", "Verbose" = " -verbose "), width = 800),
+             radioButtons("verbose", "16. Show verbose computational outline", c("Not Verbose" = "", "Verbose" = " -verbose "), width = 800, selected = " -verbose "),
              textInput("weightcompute", "17. Name of the weight computation method used", value = "default", width = 800),
              radioButtons("noenrich", "18. Disable pathway enrichment with miRNAs. Requires Enrichment set to 'NONE' (Setting 5):", c("Do not disable" ="", "Disable" = " -no-enrichment "), width = 800),
              
              
              
              actionButton("runmithril1", "Run MITrIL")
-    )
-             ),
+          ),
+          tabPanel("Log MITHrIL",
+                   fluidRow(
+                     column(
+                       width = 8,
+                    box(   
+                       title = "Log",
+                       width = NULL,
+                       textOutput("longtime"),
+                    ),
+                    textOutput("comout")
+                         ),
+                     column(
+                       width = 4,
+                     box(
+                       width = NULL,
+                       textOutput("waittoviz"),
+                       textOutput("donewriting"),
+                       
+                       actionButton("wantviz", "Not ready")
+                       
+                       
+                     )
+                     )
+                   )
+                   
+                   )
+             )
       )
       ),
       
       # Second tab content
       tabItem(tabName = "visualizedata",
               fluidRow(
-              box(
-                title = "Controls",
-                width = 3,
-                status = "primary", solidHeader = TRUE,
-                fileInput("datatoviz", "Please select a file: ", accept = ".txt"),
-                checkboxInput("table", "Display Table"),
-                checkboxInput("hist", "Display  Histogram")
-                
-              ),
-              box(
-                title = "Visualization",
-                status = "success", solidHeader = TRUE,
-                width = 9,
-                conditionalPanel(
-                  condition = "input.table == TRUE",
-                  tableOutput("tableplot"),
+                tabBox(
+                  width = 12,
+              tabPanel("From MITHrIL",
+                       fluidRow(
+                         box(
+                           status = "primary", solidHeader = TRUE,
+                           title = "Show:",
+                           width = 3,
+                           checkboxInput("tabletemp", "Display Table", value = TRUE),
+                           checkboxInput("histtemp", "Display  Histogram", value = TRUE)
+                         ),
+                         box(
+                           title = "Visualization",
+                           status = "success", solidHeader = TRUE,
+                           width = 9,
+                           conditionalPanel(
+                             condition = "input.tabletemp == TRUE",
+                             tableOutput("tableplottemp")
+                           ),
+                           conditionalPanel(
+                             condition = "input.histtemp == TRUE",
+                             plotOutput("histplottemp")
+                           )
+                          )
+                         )
                 ),
-                conditionalPanel(
-                  condition = "input.hist == TRUE",
-                  plotOutput("histplot")
-                )
-                
-              )
-              )
+             tabPanel("From File",
+                     fluidRow(
+                       box(
+                         title = "Controls",
+                         width = 3,
+                         status = "primary", solidHeader = TRUE,
+                         fileInput("datatoviz", "Please select a file: ", accept = ".txt"),
+                         checkboxInput("table", "Display Table", value = TRUE),
+                         checkboxInput("hist", "Display  Histogram", value = TRUE)
+                         
+                       ),
+                       box(
+                         title = "Visualization",
+                         status = "success", solidHeader = TRUE,
+                         width = 9,
+                         conditionalPanel(
+                           condition = "input.table == TRUE",
+                           tableOutput("tableplot")
+                         ),
+                         conditionalPanel(
+                           condition = "input.hist == TRUE",
+                           plotOutput("histplot")
+                         )
+                       )
+                     )  
+            ),
+            
+          
       )
     )
   )
+)
+)
 )
 
 
@@ -150,9 +210,9 @@ server <- function(input, output, session) {
   outputpath <- reactive(input$outputpath)
   organism <- reactive(substr(input$organism, 1, unlist(gregexpr(' ', input$organism))[1]))
   
+  
+  
   # Advanced settings
-  
-  
   adjusterVAL <- reactive(input$adjusterVAL)
   combinerVAL <- reactive(input$combinerVal)
   binary <- reactive(input$binary)
@@ -203,14 +263,70 @@ server <- function(input, output, session) {
   
   weightcomp <- reactive(paste0(" -weight-computation-method ", input$weightcompute))
   
+  
+  
+  
+  
   # Running mithril on button press
   observeEvent(input$runmithril | input$runmithril1, {
-    system(paste0("powershell -command \"java -jar ./mithril-standalone-mithril-2/Built/MITHrIL2.jar batch-mithril -i ", filepath(), " -o ", outputpath() ," -organism ", organism(), 
+    showNotification("Running MITHrIL. Check Log MITHrIL for more details.", type = "warning")
+    results <- system(paste0("powershell -command \"java -jar ./mithril-standalone-mithril-2/Built/MITHrIL2.jar batch-mithril -i ", filepath(), " -o ", outputpath() ," -organism ", organism(), 
                   " -adjuster ", adjusterVAL(), " -combiner ", combinerVAL(), binary(), decoys(), enrichment(), 
                   metapath(), excludeCAT$excat, includeCAT$incat, expath$expat, incpath$inpath, filter$filterout, verbose(),
-                  nocomplete(), iterationN(), seed(), threads(), weightcomp(), noenrich()))
+                  nocomplete(), iterationN(), seed(), threads(), weightcomp(), noenrich()), intern = TRUE)
+    output$comout <- renderText(results)
+    
+    #tempval <- grepl("Writing", results)
+    if (results[[1]] != "") {
+      output$donewriting <- renderText("Done!") 
+      updateActionButton(session, "wantviz", "Want to Visualize?")
+      showNotification("MITHrIL is done", type = "message")
+    }
+    
   }, ignoreInit = TRUE
   )
+  
+  
+  
+  
+  
+  
+  # Log Pannel
+  output$longtime <- renderText("Running MITHrIL could take a while. Once the algorithm is done, here there will displayed the Console Log.")
+  output$waittoviz <- renderText("Once MITHrIL is done, it is possible to visualize the results.")
+  
+  observeEvent(input$wantviz, {
+    updateTabItems(session, "tabs", "visualizedata")
+    tempinput <- reactive(colnames(read.csv(input$upload$datapath, sep = "\t", row.names = 1)))
+    temppath <- paste0(outputpath(), "/", tempinput(), ".main.txt")
+    datatemp <- read.csv(temppath, sep = "\t", row.names = 1)
+    output$tableplottemp <- renderTable({
+      if (input$tabletemp == "TRUE") {
+        datatemp
+      }
+    })
+    output$histplottemp <- renderPlot({
+      if (input$histtemp == "TRUE") {
+        df <- datatemp
+        Pathway <- rownames(df)
+        CA <- df[[6]]
+        ggplot(df, aes(x=Pathway, y= CA, fill = CA < 0)) +
+          geom_bar(stat = "identity") +
+          scale_fill_manual(guide = FALSE,
+                            values = c("forestgreen", "darkred")) +
+          coord_flip() +
+          labs(
+            title = "Corrected Accumulator"
+          ) +
+          theme(plot.title = element_text(size=22, color = "deepskyblue4"))
+      }
+    })
+    
+  })
+  
+  
+  
+  
   
   
   ###### Data Visualization server side 
@@ -225,6 +341,8 @@ server <- function(input, output, session) {
     )
   })
   
+  
+  
   output$tableplot <- renderTable({
     if (input$table == "TRUE") {
       data()
@@ -234,14 +352,14 @@ server <- function(input, output, session) {
     if (input$hist == "TRUE") {
       df <- data()
       Pathway <- rownames(df)
-      IF <- df[[3]]
-      ggplot(df, aes(x=Pathway, y= IF, fill = IF < 0)) +
+      CA <- df[[6]]
+      ggplot(df, aes(x=Pathway, y= CA, fill = CA < 0)) +
         geom_bar(stat = "identity") +
         scale_fill_manual(guide = FALSE,
                           values = c("forestgreen", "darkred")) +
         coord_flip() +
         labs(
-          title = "Impact Factor"
+          title = "Corrected Accumulator"
         ) +
         theme(plot.title = element_text(size=22, color = "deepskyblue4"))
     }
